@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Task2 — Trigger</title>
+<style>
+  :root{
+    --bg:#071016; --panel:#0e1b24; --accent:#2ce0b2; --muted:#9fb3b0; --glow: 0 6px 20px rgba(44,224,178,0.12);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg,#041018 0%, #071b20 100%);
+    color:#e6fff6;
+  }
+  .card{
+    width:720px; max-width:95vw; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border:1px solid rgba(46,224,178,0.08); padding:26px; border-radius:12px; box-shadow:var(--glow);
+  }
+  h1{margin:0 0 6px 0; font-size:20px; color:var(--accent); letter-spacing:0.6px}
+  p.lead{margin:0 0 14px 0; color:var(--muted)}
+  .qbox{background:rgba(255,255,255,0.02); padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.02)}
+  input[type="text"]{width:100%; padding:10px 12px; margin-top:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);
+    background:transparent; color:inherit; font-size:15px; outline:none}
+  .row{display:flex; gap:10px; margin-top:12px; align-items:center}
+  button{
+    background:var(--accent); color:#002; border:0; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600;
+    box-shadow: 0 6px 18px rgba(44,224,178,0.12);
+  }
+  button.ghost{background:transparent; color:var(--muted); border:1px solid rgba(255,255,255,0.03)}
+  .hint{margin-top:10px; color:var(--muted); font-size:13px}
+  /* toast */
+  .toast {
+    position:fixed; right:20px; bottom:20px; min-width:260px; background:linear-gradient(90deg,#062b2a,#0b2b25);
+    border:1px solid rgba(46,224,178,0.12); padding:12px 14px; border-radius:10px; color:#dffef0; box-shadow:0 8px 30px rgba(2,8,10,0.6);
+    transform: translateY(12px); opacity: 0; transition: all 280ms cubic-bezier(.2,.9,.2,1);
+    display:flex; gap:12px; align-items:center;
+  }
+  .toast.show{ transform: translateY(0); opacity:1; }
+  .toast .title{font-weight:700; color:var(--accent); font-size:14px}
+  .toast .body{font-size:13px; color:#dffef0}
+  .secret{font-family:monospace; background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; color:#fff; margin-left:auto}
+  .small{font-size:13px; color:var(--muted)}
+  footer{margin-top:12px; text-align:right; font-size:12px; color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="card" role="main" aria-labelledby="title">
+    <h1 id="title">Activation Chamber</h1>
+    <p class="lead">Answer the quick quiz below to trigger the final notification. This will reveal the last flag.</p>
+
+    <div class="qbox" id="quizBox">
+      <div><strong>Question:</strong> I have keys but no locks. I have space but no room. You can enter but can't go inside. What am I?</div>
+
+      <input id="answer" type="text" autocomplete="off" placeholder="Type your answer here" aria-label="quiz answer"/>
+      <div class="row">
+        <button id="submitBtn">Submit Answer</button>
+        <button id="revealTip" class="ghost">Get a gentle hint</button>
+        <div class="small" id="status">Attempts: <span id="attempts">0</span></div>
+      </div>
+
+      <p class="hint">Tip: think literal; it's something you use every day to type.</p>
+    </div>
+
+    <footer>
+      <span class="small">If browser notifications are allowed, you'll also get a desktop notification.</span>
+    </footer>
+  </div>
+
+  <!-- Toast / Notification -->
+  <div class="toast" id="toast" role="alert" aria-live="polite">
+    <div>
+      <div class="title">Trigger Activated</div>
+      <div class="body">You unlocked the final flag.</div>
+    </div>
+    <div class="secret" id="secretFlag">Y0UM4D31T</div>
+  </div>
+
+<script>
+/*
+  trigger.html
+  - Single quiz question
+  - Correct answer reveals an in-page toast and attempts a native notification
+  - Change CORRECT_ANSWER variable below to set the expected answer
+*/
+
+const CORRECT_ANSWER = 'keyboard'; // change this if you want a different correct answer (case-insensitive)
+const submitBtn = document.getElementById('submitBtn');
+const revealTipBtn = document.getElementById('revealTip');
+const answerInput = document.getElementById('answer');
+const toast = document.getElementById('toast');
+const attemptsEl = document.getElementById('attempts');
+
+let attempts = 0;
+
+function normalize(s){ return String(s||'').trim().toLowerCase(); }
+
+function showToast() {
+  toast.classList.add('show');
+  // auto-hide after 10s
+  setTimeout(()=> toast.classList.remove('show'), 10000);
+}
+
+// Try to use the Web Notification API if available
+function showNativeNotification(flag) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    new Notification('Final Flag', { body: `Flag: ${flag}`, icon: '' });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        new Notification('Final Flag', { body: `Flag: ${flag}`, icon: '' });
+      }
+    });
+  }
+}
+
+submitBtn.addEventListener('click', ()=>{
+  attempts++;
+  attemptsEl.textContent = attempts;
+  const val = normalize(answerInput.value);
+  if (!val) {
+    document.getElementById('status').textContent = 'Please type an answer.';
+    return;
+  }
+  if (val === normalize(CORRECT_ANSWER)) {
+    // Reveal the toast + native notification
+    const flag = 'Y0UM4D31T';
+    document.getElementById('secretFlag').textContent = flag;
+    showToast();
+    showNativeNotification(flag);
+    // Optionally record that trigger fired (localStorage)
+    try { localStorage.setItem('task2_triggered', new Date().toISOString()); } catch(e){}
+    // disable inputs to avoid repeated opens
+    answerInput.disabled = true;
+    submitBtn.disabled = true;
+    revealTipBtn.disabled = true;
+    document.getElementById('status').textContent = 'Triggered — flag revealed.';
+  } else {
+    document.getElementById('status').textContent = 'Incorrect — try again.';
+  }
+});
+
+// gentle hint button
+revealTipBtn.addEventListener('click', ()=>{
+  alert('Hint: It has keys and a spacebar — you use it to type.');
+});
+
+// support pressing Enter to submit
+answerInput.addEventListener('keydown', (e)=> {
+  if (e.key === 'Enter') submitBtn.click();
+});
+
+// small UX: focus input
+answerInput.focus();
+</script>
+</body>
+</html>
